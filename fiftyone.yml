@@ -1,0 +1,15 @@
+name: "@voxel51/labelbox"
+description: Utilities for integrating FiftyOne with Labelbox
+version: 1.0.0
+fiftyone:
+  version: ">=0.22"
+operators:
+  - request_annotations
+  - load_annotations
+  - get_annotation_info
+  - load_annotation_view
+  - rename_annotation_run
+  - delete_annotation_run
+secrets:
+  - FIFTYONE_LABELBOX_URL
+  - FIFTYONE_LABELBOX_API_KEY
