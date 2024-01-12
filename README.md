@@ -1,44 +1,45 @@
-# Annotation Plugin
+# Labelbox Annotation Plugin
 
-A plugin that contains utilities for integrating FiftyOne with annotation
-tools.
-
-In order to use this plugin, you must have at least one annotation backend
-configured as
-[described here](https://docs.voxel51.com/user_guide/annotation.html).
+A plugin that contains utilities for integrating FiftyOne with the Labelbox annotation integration backend
+[described here](https://docs.voxel51.com/integrations/labelbox.html).
 
 ## Installation
 
+### Local Python environment:
+
 ```shell
 fiftyone plugins download \
-    https://github.com/voxel51/fiftyone-plugins \
-    --plugin-names @voxel51/annotation
+    https://github.com/ehofesmann/fiftyone_labelbox
 ```
 
 Refer to the [main README](https://github.com/voxel51/fiftyone-plugins) for
 more information about managing downloaded plugins and developing plugins
 locally.
 
+Set the `FIFTYONE_LABELBOX_API_KEY=XXXXX` environment variable following [these instructions](https://docs.voxel51.com/integrations/labelbox.html#authentication).
+
+### Install in FiftyOne Teams environment:
+
+1) Download the zip of this repository:
+
+![image](https://github.com/ehofesmann/fiftyone_labelbox/assets/21222883/2adb370b-e52e-4141-b7d0-3e39b502019f)
+
+2) [Install it through your FiftyOne Teams App.](https://docs.voxel51.com/teams/teams_plugins.html#installing-a-plugin)
+
+    (Alternative): Upload it through the [FiftyOne Teams management SDK.](https://docs.voxel51.com/teams/management_sdk.html#fiftyone.management.plugin.upload_plugin)
+
+3) Add the `FIFTYONE_LABELBOX_API_KEY` [secret in your FiftyOne Teams App.](https://docs.voxel51.com/teams/secrets.html)
+
 ## Usage
 
-1.  Launch the App:
+In the FiftyOne App, press `` ` `` or click the `Browse operations` action to open the Operators list. Select one of the operators mentioned below.
 
-```py
-import fiftyone as fo
-import fiftyone.zoo as foz
+This plugin can also be used entirely through Python by loading the relevant methods directly from the plugin through `foo.get_operator()`.
 
-dataset = foz.load_zoo_dataset("quickstart")
-session = fo.launch_app(dataset)
-```
 
-2.  Press `` ` `` or click the `Browse operations` action to open the Operators
-    list
+### Operators
 
-3.  Select any of the operators listed below!
-
-## Operators
-
-### request_annotations
+#### request_annotations
 
 You can use this operator to create annotation tasks for the current dataset or
 view.
@@ -47,7 +48,10 @@ This operator is essentially a wrapper around the
 [request annotations Python workflow](https://docs.voxel51.com/user_guide/annotation.html#requesting-annotations):
 
 ```py
-dataset_or_view.annotate(
+import fiftyone.operators as foo
+annotate = foo.get_operator("@ehofesmann/labelbox/request_annotations")
+annotate(
+    dataset_or_view,
     anno_key,
     backend=...,
     label_schema=...,
@@ -59,7 +63,7 @@ where the operator's form allows you to configure the annotation key,
 annotation backend, label schema, and any other applicable fields for your
 annotation backend.
 
-### load_annotations
+#### load_annotations
 
 You can use this operator to load annotations for existing runs back onto your
 dataset.
@@ -68,48 +72,16 @@ This operator is essentially a wrapper around the
 [load annotations Python workflow](https://docs.voxel51.com/user_guide/annotation.html#loading-annotations):
 
 ```py
-dataset_or_view.load_annotations(anno_key, ...)
+import fiftyone.operators as foo
+load_annotations = foo.get_operator("@ehofesmann/labelbox/load_annotations")
+
+load_annotations(dataset, anno_key, ...)
 ```
 
 where the operator's form allows you to configure the annotation key and
 related options.
 
-### get_annotation_info
-
-You can use this operator to get information about annotation runs.
-
-This operator is essentially a wrapper around
-[get_annotation_info()](https://docs.voxel51.com/api/fiftyone.core.collections.html#fiftyone.core.collections.SampleCollection.get_annotation_info):
-
-```py
-info = dataset_or_view.get_annotation_info(anno_key)
-print(info)
-```
-
-### load_annotation_view
-
-You can use this operator to load the view on which an annotation run was
-performed.
-
-This operator is essentially a wrapper around
-[load_annotation_view()](https://docs.voxel51.com/api/fiftyone.core.collections.html#fiftyone.core.collections.SampleCollection.load_annotation_view):
-
-```py
-view = dataset.load_annotation_view(anno_key)
-```
-
-### rename_annotation_run
-
-You can use this operator to rename annotation runs.
-
-This operator is essentially a wrapper around
-[rename_annotation_run()](https://docs.voxel51.com/api/fiftyone.core.collections.html#fiftyone.core.collections.SampleCollection.rename_annotation_run):
-
-```py
-dataset_or_view.rename_annotation_run(anno_key, new_anno_key)
-```
-
-### delete_annotation_run
+#### delete_annotation_run
 
 You can use this operator to delete annotation runs.
 
@@ -117,5 +89,8 @@ This operator is essentially a wrapper around
 [delete_annotation_run()](https://docs.voxel51.com/api/fiftyone.core.collections.html#fiftyone.core.collections.SampleCollection.delete_annotation_run):
 
 ```py
-dataset_or_view.delete_annotation_run(anno_key)
+import fiftyone.operators as foo
+delete_annotation_run = foo.get_operator("@ehofesmann/labelbox/delete_annotation_run")
+
+delete_annotation_run(dataset, anno_key, cleanup=True)
 ```
