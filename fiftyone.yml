@@ -1,4 +1,4 @@
-name: "@voxel51/labelbox"
+name: "@ehofesmann/labelbox"
 description: Utilities for integrating FiftyOne with Labelbox
 version: 1.0.0
 fiftyone:
