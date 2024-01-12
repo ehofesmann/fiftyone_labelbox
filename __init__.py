@@ -569,6 +569,16 @@ class LabelboxBackend(AnnotationBackend):
                 "annotate the class as a required attribute of each object"
             ),
         )
+        inputs.bool(
+            "upload_media",
+            default=True,
+            label="Upload media directly or only send filepaths",
+            description=(
+                "Whether to download cloud media to your local "
+                "cache and upload it to Labelbox (True) or to just pass the "
+                "cloud paths directly (False)"
+            ),
+        )
 
     def parse_parameters(self, ctx, params):
         if "member" in params:
