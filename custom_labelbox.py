@@ -698,7 +698,7 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
 
         project = self._client.get_project(project_id)
         labels_json = self._download_project_labels(project=project)
-        is_video = results._samples.media_type == fomm.VIDEO
+        is_video = (results._samples.media_type == fomm.VIDEO) or (results._samples.media_type == fomm.GROUP and results._samples.group_slice == 'video')
 
         annotations = {}
 
@@ -732,7 +732,7 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
                 video_d_list = self._get_video_labels(d["Label"])
                 frames = {}
                 for label_d in video_d_list:
-                    frame_number = label_d["frameNumber"]
+                    frame_number = int(label_d["frameNumber"])
                     frame_id = frame_id_map[sample_id][frame_number]
                     labels_dict = _parse_image_labels(
                         label_d, frame_size, class_attr=class_attr
