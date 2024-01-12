@@ -53,7 +53,6 @@ annotate = foo.get_operator("@ehofesmann/labelbox/request_annotations")
 annotate(
     dataset_or_view,
     anno_key,
-    backend=...,
     label_schema=...,
     ...
 )
