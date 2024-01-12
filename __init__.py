@@ -9,12 +9,18 @@ import json
 import os
 import sys
 
+import importlib
 from bson import json_util
 
 import fiftyone as fo
 import fiftyone.operators as foo
 import fiftyone.operators.types as types
 import fiftyone.utils.annotations as foua
+import fiftyone.core.utils as fou
+
+
+with fou.add_sys_path(os.path.dirname(os.path.abspath(__file__))):
+    import custom_labelbox
 
 
 class RequestAnnotations(foo.Operator):
@@ -28,10 +34,22 @@ class RequestAnnotations(foo.Operator):
             dynamic=True,
         )
 
+    def __call__(self, sample_collection, anno_key, delegate=False, **kwargs):
+        ctx = dict(view=sample_collection.view())
+        params = dict(
+            anno_key=anno_key,
+            schema_type="JSON",
+            required_inputs=False,
+            **kwargs,
+        )
+        foo.execute_operator(self.uri, ctx, params=params)
+        return sample_collection.load_annotation_results(anno_key)
+
     def resolve_input(self, ctx):
         inputs = types.Object()
 
-        ready = request_annotations(ctx, inputs)
+        required_inputs = ctx.params.get("required_inputs", True)
+        ready = request_annotations(ctx, inputs, required_inputs=required_inputs)
         if ready:
             _execution_mode(ctx, inputs)
 
@@ -42,14 +60,17 @@ class RequestAnnotations(foo.Operator):
         return ctx.params.get("delegate", False)
 
     def execute(self, ctx):
+        with fou.add_sys_path(os.path.dirname(os.path.abspath(__file__))):
+            importlib.reload(custom_labelbox)
         kwargs = ctx.params.copy()
         target = kwargs.pop("target", None)
         anno_key = kwargs.pop("anno_key")
         backend = "custom_labelbox"
-        kwargs.pop("delegate")
+        kwargs.pop("delegate", None)
+        kwargs.pop("required_inputs", None)
 
         # Parse label schema
-        kwargs.pop("schema_type")
+        kwargs.pop("schema_type", None)
         label_schema = kwargs.pop("label_schema", None)
         label_schema_fields = kwargs.pop("label_schema_fields", None)
         if label_schema:
@@ -79,7 +100,7 @@ class RequestAnnotations(foo.Operator):
         return types.Property(outputs, view=view)
 
 
-def request_annotations(ctx, inputs):
+def request_annotations(ctx, inputs, required_inputs=True):
     target_view = get_target_view(ctx, inputs)
 
     fo.annotation_config.backends["custom_labelbox"] = {
@@ -88,7 +109,7 @@ def request_annotations(ctx, inputs):
     }
     backend = LabelboxBackend("custom_labelbox")
 
-    anno_key = get_new_anno_key(ctx, inputs)
+    anno_key = get_new_anno_key(ctx, inputs, required_inputs=required_inputs)
     if anno_key is None:
         return False
 
@@ -97,7 +118,7 @@ def request_annotations(ctx, inputs):
         inputs.enum(
             "media_field",
             media_fields,
-            required=True,
+            required=required_inputs,
             default="filepath",
             label="Media field",
             description=(
@@ -106,18 +127,18 @@ def request_annotations(ctx, inputs):
             ),
         )
 
-    label_schema = get_label_schema(ctx, inputs, backend, target_view)
+    label_schema = get_label_schema(ctx, inputs, backend, target_view, required_inputs=required_inputs)
     if not label_schema:
         return False
 
-    get_generic_parameters(ctx, inputs)
-    backend.get_parameters(ctx, inputs)
+    get_generic_parameters(ctx, inputs, required_inputs=required_inputs)
+    backend.get_parameters(ctx, inputs, required_inputs=required_inputs)
 
     return True
 
 
-def get_new_anno_key(ctx, inputs, name="anno_key", label="Annotation key"):
-    prop = inputs.str(name, label=label, required=True)
+def get_new_anno_key(ctx, inputs, name="anno_key", label="Annotation key", required_inputs=True):
+    prop = inputs.str(name, label=label, required=required_inputs)
 
     anno_key = ctx.params.get(name, None)
     if anno_key is not None and anno_key in ctx.dataset.list_annotation_runs():
@@ -128,7 +149,7 @@ def get_new_anno_key(ctx, inputs, name="anno_key", label="Annotation key"):
     return anno_key
 
 
-def get_target_view(ctx, inputs):
+def get_target_view(ctx, inputs, required_inputs=True):
     has_view = ctx.view != ctx.dataset.view()
     has_selected = bool(ctx.selected)
     default_target = None
@@ -160,7 +181,7 @@ def get_target_view(ctx, inputs):
         inputs.enum(
             "target",
             target_choices.values(),
-            required=True,
+            required=required_inputs,
             default=default_target,
             label="Target view",
             view=target_choices,
@@ -181,7 +202,7 @@ def _get_target_view(ctx, target):
     return ctx.view
 
 
-def get_label_schema(ctx, inputs, backend, view):
+def get_label_schema(ctx, inputs, backend, view, required_inputs=True):
     schema_choices = types.TabsView()
     schema_choices.add_choice("BUILD", label="Build")
     schema_choices.add_choice("JSON", label="JSON")
@@ -191,7 +212,7 @@ def get_label_schema(ctx, inputs, backend, view):
     inputs.enum(
         "schema_type",
         schema_choices.values(),
-        required=True,
+        required=required_inputs,
         default="BUILD",
         label="Label schema",
         description="Choose how to provide your label schema",
@@ -202,7 +223,7 @@ def get_label_schema(ctx, inputs, backend, view):
     if schema_type == "PROJECT":
         inputs.str(
             "project_name",
-            required=True,
+            required=required_inputs,
             label="Existing project",
             description=(
                 "Provide the name of an existing CVAT project to which to "
@@ -217,7 +238,7 @@ def get_label_schema(ctx, inputs, backend, view):
         # @todo switch to editable JSON viewer
         prop = inputs.str(
             "label_schema",
-            required=True,
+            required=required_inputs,
             label="Paste your label schema JSON",
             description="https://docs.voxel51.com/user_guide/annotation.html#label-schema",
             view=types.CodeView(),
@@ -232,7 +253,7 @@ def get_label_schema(ctx, inputs, backend, view):
                 label_schema = None
                 prop.invalid = True
                 prop.error_message = "Invalid JSON"
-        else:
+        elif not label_schema and required_inputs:
             prop.invalid = True
             prop.error_message = "Required property"
 
@@ -241,7 +262,7 @@ def get_label_schema(ctx, inputs, backend, view):
         prop = inputs.list(
             "label_schema_fields",
             build_label_schema_field(ctx, backend, view),
-            required=True,
+            required=required_inputs,
             label="Label fields",
             description="Configure the field(s) in your label schema",
         )
@@ -398,7 +419,7 @@ def create_attribute_schema(ctx, backend):
     return attribute_schema
 
 
-def get_generic_parameters(ctx, inputs):
+def get_generic_parameters(ctx, inputs, required_inputs=True):
     checkbox_style = types.View(space=20)
 
     #inputs.str(
@@ -515,7 +536,7 @@ class AnnotationBackend(object):
 
 
 class LabelboxBackend(AnnotationBackend):
-    def get_parameters(self, ctx, inputs):
+    def get_parameters(self, ctx, inputs, required_inputs=True):
         #inputs.str(
         #    "labelbox_header",
         #    view=types.Header(
@@ -532,7 +553,7 @@ class LabelboxBackend(AnnotationBackend):
         )
         inputs.list(
             "member",
-            self.build_member(),
+            self.build_member(required_inputs=required_inputs),
             default=None,
             label="Members",
             description=(
@@ -555,11 +576,11 @@ class LabelboxBackend(AnnotationBackend):
                 (m["email"], m["role"]) for m in params["member"]
             ]
 
-    def build_member(self):
+    def build_member(self, required_inputs=True):
         member_schema = types.Object()
         member_schema.str(
             "email",
-            required=True,
+            required=required_inputs,
             label="Email",
             description="Email address",
             view=types.View(space=6),
@@ -593,6 +614,16 @@ class LoadAnnotations(foo.Operator):
             dynamic=True,
         )
 
+    def __call__(self, sample_collection, anno_key, unexpected="prompt", cleanup=False, delegate=False):
+        ctx = dict(dataset=sample_collection._dataset)
+        params = dict(
+            anno_key=anno_key,
+            unexpected=unexpected,
+            cleanup=cleanup,
+            delegate=delegate,
+        )
+        foo.execute_operator(self.uri, ctx, params=params)
+
     def resolve_input(self, ctx):
         inputs = types.Object()
 
@@ -607,6 +638,8 @@ class LoadAnnotations(foo.Operator):
         return ctx.params.get("delegate", False)
 
     def execute(self, ctx):
+        with fou.add_sys_path(os.path.dirname(os.path.abspath(__file__))):
+            importlib.reload(custom_labelbox)
         anno_key = ctx.params["anno_key"]
         unexpected = ctx.params["unexpected"]
         cleanup = ctx.params["cleanup"]
@@ -821,6 +854,15 @@ class DeleteAnnotationRun(foo.Operator):
             dynamic=True,
         )
 
+    def __call__(self, sample_collection, anno_key, unexpected="prompt", cleanup=False, delegate=False):
+        ctx = dict(dataset=sample_collection._dataset)
+        params = dict(
+            anno_key=anno_key,
+            cleanup=cleanup,
+            delegate=delegate,
+        )
+        foo.execute_operator(self.uri, ctx, params=params)
+
     def resolve_input(self, ctx):
         inputs = types.Object()
 
@@ -847,6 +889,8 @@ class DeleteAnnotationRun(foo.Operator):
         return types.Property(inputs, view=view)
 
     def execute(self, ctx):
+        with fou.add_sys_path(os.path.dirname(os.path.abspath(__file__))):
+            importlib.reload(custom_labelbox)
         anno_key = ctx.params["anno_key"]
         cleanup = ctx.params.get("cleanup", False)
 
@@ -891,14 +935,18 @@ def get_anno_key(ctx, inputs, show_default=True):
 
 
 def _inject_annotation_secrets(ctx):
-
-
     for key, value in getattr(ctx, "secrets", {}).items():
         # FIFTYONE_LABELBOX_[UPPER_KEY]
-        if key.startswith("FIFTYONE_LABELBOX_"):
+        if key.startswith("FIFTYONE_LABELBOX_") and value is not None:
             _key = key[len("FIFTYONE_LABELBOX_") :].lower()
             fo.annotation_config.backends["labelbox"][_key] = value
             fo.annotation_config.backends["custom_labelbox"][_key] = value
+
+        if key.startswith("FIFTYONE_CUSTOM_LABELBOX_") and value is not None:
+            _key = key[len("FIFTYONE_CUSTOM_LABELBOX_") :].lower()
+            fo.annotation_config.backends["labelbox"][_key] = value
+            fo.annotation_config.backends["custom_labelbox"][_key] = value
+
 
 
 def _execution_mode(ctx, inputs):
