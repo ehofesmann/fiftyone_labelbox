@@ -156,7 +156,7 @@ class LabelboxBackend(foua.AnnotationBackend):
 
     @property
     def supports_video_sample_fields(self):
-        return False  # @todo resolve FiftyOne bug to allow this to be True
+        return True
 
     @property
     def requires_label_schema(self):
