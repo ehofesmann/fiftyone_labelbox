@@ -579,25 +579,14 @@ class LabelboxBackend(AnnotationBackend):
                 "cloud paths directly (False)"
             ),
         )
-        # TODO: Improve UX. Ideally we could pull all the available integrations
-        # and let the user choose from them with a dropdown, along with
-        # "default" for the default integration and "none" for no integration
-        inputs.bool(
-            "iam_integration_use_default",
-            default=True,
-            label="Use default Labelbox IAM integration",
-            description=(
-                "Whether to use the default IAM integration configured in "
-                "Labelbox"
-            )
-        )
         inputs.str(
             "iam_integration_name",
-            default=None,
+            default="DEFAULT",
             label="Labelbox IAM integration name",
             description=(
                 "The name of the IAM integration to associate with the created "
-                "Labelbox dataset (leave empty to use no integration)"
+                "Labelbox dataset (use \"DEFAULT\" for the default integration "
+                "or \"NONE\" for no integration)"
             )
         )
 

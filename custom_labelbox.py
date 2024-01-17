@@ -66,8 +66,6 @@ class LabelboxBackendConfig(foua.AnnotationBackendConfig):
         upload_media (True): whether to download cloud media to your local
             cache and upload it to Labelbox (True) or to just pass the cloud
             paths directly (False)
-        iam_integration_use_default (True): whether to use the default IAM
-            integration configured in Labelbox
         iam_integration_name (None): the name of the IAM integration to
             associate with the created Labelbox dataset
     """
@@ -83,7 +81,6 @@ class LabelboxBackendConfig(foua.AnnotationBackendConfig):
         members=None,
         classes_as_attrs=True,
         upload_media=True,
-        iam_integration_use_default=True,
         iam_integration_name=None,
         **kwargs,
     ):
@@ -94,7 +91,6 @@ class LabelboxBackendConfig(foua.AnnotationBackendConfig):
         self.members = members
         self.classes_as_attrs = classes_as_attrs
         self.upload_media = upload_media
-        self.iam_integration_use_default = iam_integration_use_default
         self.iam_integration_name = iam_integration_name
 
         # store privately so these aren't serialized
@@ -596,7 +592,6 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
         dataset_name,
         media_field="filepath",
         upload_media=True,
-        iam_integration_use_default=True,
         iam_integration_name=None
     ):
         """Uploads the media for the given samples to Labelbox.
@@ -615,10 +610,8 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
             upload_media (True): whether to download cloud media to your local
                 cache and upload it to Labelbox (True) or to just pass the
                 cloud paths directly (False)
-            iam_integration_use_default (True): Whether to use the default IAM
-                integration configured in Labelbox
-            iam_integration_name (None): the name of the IAM integration to
-                associate with the created Labelbox dataset
+            iam_integration_name ("DEFAULT"): the name of the IAM integration
+                to associate with the created Labelbox dataset
         """
         media_paths, sample_ids = samples.values([media_field, "id"])
         if upload_media:
@@ -648,15 +641,15 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
                 )
 
         if upload_info:
-            # Set IAM integration (use-default flag overrides given IAM name)
-            if iam_integration_use_default:
-                iam_integration = 'DEFAULT'
-            elif iam_integration_name:
+            # Set IAM integration
+            if iam_integration_name == "DEFAULT":
+                iam_integration = "DEFAULT"
+            elif iam_integration_name == "NONE":
+                iam_integration = None
+            else:
                 iam_integration = self.get_iam_integration_by_name(
                     iam_integration_name
                 )
-            else:
-                iam_integration = None
 
             lb_dataset = self._client.create_dataset(
                 name=dataset_name,
@@ -688,7 +681,6 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
         project_name = config.project_name
         members = config.members
         classes_as_attrs = config.classes_as_attrs
-        iam_integration_use_default = config.iam_integration_use_default
         iam_integration_name = config.iam_integration_name
         is_video = samples.media_type == fomm.VIDEO
 
@@ -709,7 +701,6 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
             project_name,
             media_field=media_field,
             upload_media=upload_media,
-            iam_integration_use_default=iam_integration_use_default,
             iam_integration_name=iam_integration_name,
         )
         global_keys = samples.values("id")
