@@ -579,6 +579,16 @@ class LabelboxBackend(AnnotationBackend):
                 "cloud paths directly (False)"
             ),
         )
+        inputs.str(
+            "iam_integration_name",
+            default="DEFAULT",
+            label="Labelbox IAM integration name",
+            description=(
+                "The name of the IAM integration to associate with the created "
+                "Labelbox dataset (use \"DEFAULT\" for the default integration "
+                "or \"NONE\" for no integration)"
+            )
+        )
 
     def parse_parameters(self, ctx, params):
         if "member" in params:
