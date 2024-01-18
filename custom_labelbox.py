@@ -66,8 +66,9 @@ class LabelboxBackendConfig(foua.AnnotationBackendConfig):
         upload_media (True): whether to download cloud media to your local
             cache and upload it to Labelbox (True) or to just pass the cloud
             paths directly (False)
-        iam_integration_name (None): the name of the IAM integration to
-            associate with the created Labelbox dataset
+        iam_integration_name ("DEFAULT"): the name of the IAM integration to
+            associate with the created Labelbox dataset (or "DEFAULT" for the
+            default integration or "NONE" for no integration)
     """
 
     def __init__(
@@ -81,7 +82,7 @@ class LabelboxBackendConfig(foua.AnnotationBackendConfig):
         members=None,
         classes_as_attrs=True,
         upload_media=True,
-        iam_integration_name=None,
+        iam_integration_name="DEFAULT",
         **kwargs,
     ):
         super().__init__(name, label_schema, media_field=media_field, **kwargs)
@@ -592,7 +593,7 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
         dataset_name,
         media_field="filepath",
         upload_media=True,
-        iam_integration_name=None
+        iam_integration_name="DEFAULT"
     ):
         """Uploads the media for the given samples to Labelbox.
 
@@ -611,7 +612,8 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
                 cache and upload it to Labelbox (True) or to just pass the
                 cloud paths directly (False)
             iam_integration_name ("DEFAULT"): the name of the IAM integration
-                to associate with the created Labelbox dataset
+                to associate with the created Labelbox dataset (or "DEFAULT"
+                for the default integration or "NONE" for no integration)
         """
         media_paths, sample_ids = samples.values([media_field, "id"])
         if upload_media:
