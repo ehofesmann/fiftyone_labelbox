@@ -2401,28 +2401,32 @@ def _parse_attributes(cd_list):
     attributes = {}
 
     for cd in cd_list:
-        name = cd["value"]
-        if "answer" in cd:
-            answer = cd["answer"]
-            if isinstance(answer, list):
-                # Dropdown
-                answers = [_parse_attribute(a["value"]) for a in answer]
-                if len(answers) == 1:
-                    answers = answers[0]
+        if isinstance(cd, list):
+            attributes.update(_parse_attributes(cd))
 
-                attributes[name] = answers
+        else:
+            name = cd["value"]
+            if "answer" in cd:
+                answer = cd["answer"]
+                if isinstance(answer, list):
+                    # Dropdown
+                    answers = [_parse_attribute(a["value"]) for a in answer]
+                    if len(answers) == 1:
+                        answers = answers[0]
 
-            elif isinstance(answer, dict):
-                # Radio question
-                attributes[name] = _parse_attribute(answer["value"])
-            else:
-                # Free text
-                attributes[name] = _parse_attribute(answer)
+                    attributes[name] = answers
 
-        if "answers" in cd:
-            # Checklist
-            answer = cd["answers"]
-            attributes[name] = [_parse_attribute(a["value"]) for a in answer]
+                elif isinstance(answer, dict):
+                    # Radio question
+                    attributes[name] = _parse_attribute(answer["value"])
+                else:
+                    # Free text
+                    attributes[name] = _parse_attribute(answer)
+
+            if "answers" in cd:
+                # Checklist
+                answer = cd["answers"]
+                attributes[name] = [_parse_attribute(a["value"]) for a in answer]
 
     return attributes
 
