@@ -103,6 +103,9 @@ class RequestAnnotations(foo.Operator):
 def request_annotations(ctx, inputs, required_inputs=True):
     target_view = get_target_view(ctx, inputs)
 
+    if "custom_labelbox" not in fo.annotation_config.backends:
+        fo.annotation_config.backends["custom_labelbox"] = {}
+
     fo.annotation_config.backends["custom_labelbox"].update({
         "config_cls": "custom_labelbox.LabelboxBackendConfig",
         "url": "https://labelbox.com"
