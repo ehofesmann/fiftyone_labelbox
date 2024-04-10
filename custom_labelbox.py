@@ -2,7 +2,7 @@
 Utilities for working with annotations in
 `Labelbox format <https://labelbox.com/docs/exporting-data/export-format-detail>`_.
 
-| Copyright 2017-2023, Voxel51, Inc.
+| Copyright 2017-2024, Voxel51, Inc.
 | `voxel51.com <https://voxel51.com/>`_
 |
 """
@@ -210,7 +210,7 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
     """A class to facilitate connection to and management of projects in
     Labelbox.
 
-    On initializiation, this class constructs a client based on the provided
+    On initialization, this class constructs a client based on the provided
     server url and credentials.
 
     This API provides methods to easily upload, download, create, and delete
@@ -335,8 +335,8 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
                 return integration
 
         raise ValueError(
-            f'Could not find IAM integration with name {integration_name} '
-            f'in Labelbox'
+            f"Could not find IAM integration with name {integration_name} "
+            f"in Labelbox"
         )
 
     def get_project_users(self, project=None, project_id=None):
@@ -596,7 +596,7 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
         dataset_name,
         media_field="filepath",
         upload_media=True,
-        iam_integration_name="DEFAULT"
+        iam_integration_name="DEFAULT",
     ):
         """Uploads the media for the given samples to Labelbox.
 
@@ -657,8 +657,7 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
                 )
 
             lb_dataset = self._client.create_dataset(
-                name=dataset_name,
-                iam_integration=iam_integration
+                name=dataset_name, iam_integration=iam_integration
             )
             task = lb_dataset.create_data_rows(upload_info)
             task.wait_till_done()
@@ -687,7 +686,10 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
         members = config.members
         classes_as_attrs = config.classes_as_attrs
         iam_integration_name = config.iam_integration_name
-        is_video = samples.media_type == fomm.VIDEO
+        is_video = (samples.media_type == fomm.VIDEO) or (
+            samples.media_type == fomm.GROUP
+            and samples.group_media_types[samples.group_slice] == fomm.VIDEO
+        )
 
         for label_field, label_info in label_schema.items():
             if label_info["existing_field"]:
@@ -749,8 +751,13 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
 
         project = self._client.get_project(project_id)
         labels_json = self._download_project_labels(project=project)
-        is_video = (results._samples.media_type == fomm.VIDEO) or (results._samples.media_type == fomm.GROUP and results._samples.group_slice == 'video')
-
+        is_video = (results._samples.media_type == fomm.VIDEO) or (
+            results._samples.media_type == fomm.GROUP
+            and results._samples.group_media_types[
+                results._samples.group_slice
+            ]
+            == fomm.VIDEO
+        )
         annotations = {}
 
         if classes_as_attrs:
@@ -801,20 +808,19 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
                     label_schema,
                 )
 
-            else:
-                labels_dict = _parse_image_labels(
-                    d["Label"], frame_size, class_attr=class_attr
+            labels_dict = _parse_image_labels(
+                d["Label"], frame_size, class_attr=class_attr
+            )
+            if not classes_as_attrs:
+                labels_dict = self._process_label_fields(
+                    label_schema, labels_dict
                 )
-                if not classes_as_attrs:
-                    labels_dict = self._process_label_fields(
-                        label_schema, labels_dict
-                    )
-                annotations = self._add_labels_to_results(
-                    annotations,
-                    labels_dict,
-                    sample_id,
-                    label_schema,
-                )
+            annotations = self._add_labels_to_results(
+                annotations,
+                labels_dict,
+                sample_id,
+                label_schema,
+            )
 
         return annotations
 
@@ -1121,6 +1127,9 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
         return metadata
 
     def _get_video_labels(self, label_dict):
+        if "frames" not in label_dict:
+            return {}
+
         url = label_dict["frames"]
         headers = {"Authorization": "Bearer %s" % self._api_key}
         response = requests.get(url, headers=headers)
@@ -2439,7 +2448,9 @@ def _parse_attributes(cd_list):
             if "answers" in cd:
                 # Checklist
                 answer = cd["answers"]
-                attributes[name] = [_parse_attribute(a["value"]) for a in answer]
+                attributes[name] = [
+                    _parse_attribute(a["value"]) for a in answer
+                ]
 
     return attributes
 
