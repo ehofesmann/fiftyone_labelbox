@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 
 
 class LabelboxExportVersion(object):
-    """Enum specifying version and format for label exports"""
+    """Enum for Labelbox export formats and API versions."""
 
     V1 = "v1"
     V2 = "v2"
@@ -78,8 +78,8 @@ class LabelboxBackendConfig(foua.AnnotationBackendConfig):
         iam_integration_name ("DEFAULT"): the name of the IAM integration to
             associate with the created Labelbox dataset (or "DEFAULT" for the
             default integration or "NONE" for no integration)
-        export_version ("v2"): whether to use the Labelbox Export v1 or v2
-            label format and APIs
+        export_version ("v2"): the Labelbox export format and API version to
+            use. Supported values are ``("v1", "v2")``
     """
 
     def __init__(
@@ -237,8 +237,8 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
         name: the name of the backend
         url: url of the Labelbox server
         api_key (None): the Labelbox API key
-        export_version ("v2"): whether to use the Labelbox Export v1 or v2
-            label format and APIs
+        export_version ("v2"): the Labelbox export format and API version to
+            use. Supported values are ``("v1", "v2")``
     """
 
     def __init__(
@@ -513,12 +513,6 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
         logger.info("Deleting project '%s'...", project_id)
 
         if delete_batches:
-            if self.export_version != LabelboxExportVersion.V1:
-                logger.warning(
-                    "Deleting batches, but data rows will not be deleted. This"
-                    " method uses the Labelbox Export v1 API which has been "
-                    "deprecated, removed at the end of April 2024."
-                )
             for batch in project.batches():
                 batch.delete_labels()
                 if self.export_version != LabelboxExportVersion.V1:
@@ -1667,6 +1661,14 @@ class LabelboxAnnotationResults(foua.AnnotationResults):
         )
 
 
+def _warn_labelbox_v1():
+    logger.warning(
+        "This method uses Labelbox's v1 export format, which is deprecated. "
+        "Please use the official FiftyOne <> Labelbox integration: "
+        "https://docs.voxel51.com/integrations/labelbox.html"
+    )
+
+
 #
 # @todo
 #   Must add support for populating `schemaId` when exporting
@@ -1743,12 +1745,8 @@ def import_from_labelbox(
             default value ``fiftyone.config.show_progress_bars`` (None), or a
             progress callback function to invoke instead
     """
-    logger.warning(
-        "This method uses the Export v1 format of Labelbox which is "
-        "deprecated, removed at the end of April 2024. Instead, please use the"
-        " `FiftyOne and Labelbox integration <https://docs.voxel51.com/integrations/labelbox.html>`_"
-        " when interacting with Labelbox."
-    )
+    _warn_labelbox_v1()
+
     fov.validate_collection(dataset, media_type=(fomm.IMAGE, fomm.VIDEO))
     is_video = dataset.media_type == fomm.VIDEO
 
@@ -1905,12 +1903,8 @@ def export_to_labelbox(
             default value ``fiftyone.config.show_progress_bars`` (None), or a
             progress callback function to invoke instead
     """
-    logger.warning(
-        "This method uses the Export v1 format of Labelbox which is "
-        "deprecated, removed at the end of April 2024. Instead, please use the"
-        " `FiftyOne and Labelbox integration <https://docs.voxel51.com/integrations/labelbox.html>`_"
-        " when interacting with Labelbox."
-    )
+    _warn_labelbox_v1()
+
     fov.validate_collection(
         sample_collection, media_type=(fomm.IMAGE, fomm.VIDEO)
     )
@@ -2005,28 +1999,24 @@ def export_to_labelbox(
 def download_labels_from_labelbox(
     labelbox_project,
     outpath=None,
-    labelbox_export_version=LabelboxExportVersion.V2,
+    export_version=LabelboxExportVersion.V2,
 ):
     """Downloads the labels for the given Labelbox project.
 
     Args:
         labelbox_project: a ``labelbox.schema.project.Project``
         outpath (None): the path to write the JSON export on disk
-        labelbox_export_version ("v2"): the version of the Labelbox export
-            format to use when downloading labels
+        export_version ("v2"): the Labelbox export format and API version to
+            use. Supported values are ``("v1", "v2")``
 
     Returns:
         ``None`` if an ``outpath`` is provided, or the loaded JSON itself if no
         ``outpath`` is provided
     """
-    if labelbox_export_version == LabelboxExportVersion.V1:
-        export_url = labelbox_project.export_labels()
-
-        if outpath:
-            fos.copy_file(export_url, outpath)
-            return None
-
-        return fos.read_json(export_url)
+    if export_version == LabelboxExportVersion.V1:
+        return _download_labels_from_labelbox_v1(
+            labelbox_project, outpath=outpath
+        )
 
     params = {
         "data_row_details": True,
@@ -2051,6 +2041,16 @@ def download_labels_from_labelbox(
         return None
 
     return export_json
+
+
+def _download_labels_from_labelbox_v1(labelbox_project, outpath=None):
+    export_url = labelbox_project.export_labels()
+
+    if outpath:
+        fos.copy_file(export_url, outpath)
+        return None
+
+    return fos.read_json(export_url)
 
 
 def upload_media_to_labelbox(
@@ -2153,9 +2153,8 @@ def convert_labelbox_export_to_import(inpath, outpath=None, video_outdir=None):
             labels (if applicable). If omitted, the input frame label files
             will be overwritten
     """
-    logger.warning(
-        "This method uses the Export v1 format of Labelbox which is deprecated, removed at the end of April 2024. Instead, please use the `FiftyOne and Labelbox integration <https://docs.voxel51.com/integrations/labelbox.html>`_ when interacting with Labelbox."
-    )
+    _warn_labelbox_v1()
+
     if outpath is None:
         outpath = inpath
 
@@ -2256,7 +2255,7 @@ def _get_frame_labels(sample, frame_label_fields):
     return frames
 
 
-class _FiftyOneToLabelboxConverterBase:
+class _FiftyOneToLabelboxConverterBase(object):
 
     # https://labelbox.com/docs/exporting-data/export-format-detail#classification
     @classmethod
@@ -2264,7 +2263,9 @@ class _FiftyOneToLabelboxConverterBase:
         if isinstance(label, fol.Classification):
             label_ids = [label.id]
         elif isinstance(label, fol.Classifications):
-            label_ids = [l.id for l in label.classifications]
+            label_ids = [
+                classification.id for classification in label.classifications
+            ]
         else:
             label_ids = []
 
@@ -2515,8 +2516,7 @@ class _FiftyOneToLabelboxExportConverterV1(_FiftyOneToLabelboxConverterBase):
         return annotations
 
 
-class _LabelboxExportToFiftyOneConverterV1:
-    # Parse Labelbox export format v1 to FiftyOne labels:
+class _LabelboxExportToFiftyOneConverterV1(object):
 
     # Parse v1 export format
     # https://docs.labelbox.com/reference/export-video-annotations
@@ -2683,10 +2683,10 @@ class _LabelboxExportToFiftyOneConverterV1:
         segmentations = []
         mask = None
         mask_instance_uri = None
+        load_fo_seg = class_attr is not None
         label_fields = {}
         for od in od_list:
             attributes = cls._parse_attributes(od.get("classifications", []))
-            load_fo_seg = class_attr is not None
             if class_attr and class_attr in attributes:
                 label_field = cls._get_label_field_attr(od)
                 label = attributes.pop(class_attr)
@@ -2736,7 +2736,7 @@ class _LabelboxExportToFiftyOneConverterV1:
                 polyline = fol.Polyline(
                     label=label,
                     points=[points],
-                    closed=True,
+                    closed=False,
                     filled=False,
                     **attributes,
                 )
@@ -2765,13 +2765,15 @@ class _LabelboxExportToFiftyOneConverterV1:
             elif "instanceURI" in od or "mask" in od:
                 # Segmentation mask
                 if not load_fo_seg:
+                    # This condition is only triggered by the deprecated
+                    # `import_from_labelbox()` method
                     if mask is None:
                         mask_instance_uri = cls._get_mask_url(od)
                         mask = cls._parse_mask(
                             mask_instance_uri, headers=headers
                         )
                         segmentation = {
-                            "mask": current_mask,
+                            "mask": mask,
                             "label": label,
                             "attributes": attributes,
                         }
@@ -2782,6 +2784,9 @@ class _LabelboxExportToFiftyOneConverterV1:
                         )
                         warnings.warn(msg)
                 else:
+                    # Segmentations are later loaded as either fo.Segmentation
+                    # or fo.Detection instances once the label schema of the
+                    # annotation task is available
                     current_mask_instance_uri = cls._get_mask_url(od)
                     current_mask = cls._parse_mask(
                         current_mask_instance_uri, headers=headers
@@ -2851,7 +2856,6 @@ class _LabelboxExportToFiftyOneConverterV1:
 class _LabelboxExportToFiftyOneConverterV2(
     _LabelboxExportToFiftyOneConverterV1
 ):
-    # Parse Labelbox export format v2 to FiftyOne labels:
     @classmethod
     def _get_answer_value(cls, answer):
         return answer["name"]
