@@ -780,7 +780,7 @@ class GetAnnotationInfo(foo.Operator):
 
         info = ctx.dataset.get_annotation_info(anno_key)
 
-        timestamp = info.timestamp.strftime("%Y-%M-%d %H:%M:%S")
+        timestamp = info.timestamp.strftime("%Y-%m-%d %H:%M:%S")
         config = info.config.serialize()
         config = {k: v for k, v in config.items() if v is not None}
 
