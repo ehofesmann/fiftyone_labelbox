@@ -595,7 +595,7 @@ class LabelboxBackend(AnnotationBackend):
 
     def parse_parameters(self, ctx, params):
         if "member" in params:
-            params["member"] = [
+            params["members"] = [
                 (m["email"], m["role"]) for m in params["member"]
             ]
 
