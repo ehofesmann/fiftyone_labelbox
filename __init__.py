@@ -555,7 +555,7 @@ class LabelboxBackend(AnnotationBackend):
             description="A name to assign to the generated project",
         )
         inputs.list(
-            "member",
+            "members",
             self.build_member(required_inputs=required_inputs),
             default=None,
             label="Members",
@@ -594,9 +594,9 @@ class LabelboxBackend(AnnotationBackend):
         )
 
     def parse_parameters(self, ctx, params):
-        if "member" in params:
+        if "members" in params:
             params["members"] = [
-                (m["email"], m["role"]) for m in params["member"]
+                (m["email"], m["role"]) for m in params["members"]
             ]
 
     def build_member(self, required_inputs=True):
