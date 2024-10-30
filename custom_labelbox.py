@@ -80,6 +80,8 @@ class LabelboxBackendConfig(foua.AnnotationBackendConfig):
             default integration or "NONE" for no integration)
         export_version ("v2"): the Labelbox export format and API version to
             use. Supported values are ``("v1", "v2")``
+        required_attrs (None): a list of attributes that must be specified on
+            each object
     """
 
     def __init__(
