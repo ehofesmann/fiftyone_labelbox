@@ -80,6 +80,8 @@ class LabelboxBackendConfig(foua.AnnotationBackendConfig):
             default integration or "NONE" for no integration)
         export_version ("v2"): the Labelbox export format and API version to
             use. Supported values are ``("v1", "v2")``
+        required_attrs (None): a list of attributes that must be specified on
+            each object
     """
 
     def __init__(
@@ -95,6 +97,7 @@ class LabelboxBackendConfig(foua.AnnotationBackendConfig):
         upload_media=True,
         iam_integration_name="DEFAULT",
         export_version=LabelboxExportVersion.V2,
+        required_attrs=None,
         **kwargs,
     ):
         super().__init__(name, label_schema, media_field=media_field, **kwargs)
@@ -106,6 +109,7 @@ class LabelboxBackendConfig(foua.AnnotationBackendConfig):
         self.upload_media = upload_media
         self.iam_integration_name = iam_integration_name
         self.export_version = export_version
+        self.required_attrs = required_attrs if required_attrs else []
 
         # store privately so these aren't serialized
         self._api_key = api_key
@@ -720,6 +724,7 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
         members = config.members
         classes_as_attrs = config.classes_as_attrs
         iam_integration_name = config.iam_integration_name
+        required_attrs = config.required_attrs
         is_video = (samples.media_type == fomm.VIDEO) or (
             samples.media_type == fomm.GROUP
             and samples.group_media_types[samples.group_slice] == fomm.VIDEO
@@ -747,7 +752,12 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
         global_keys = samples.values("id")
 
         project = self._setup_project(
-            project_name, global_keys, label_schema, classes_as_attrs, is_video
+            project_name,
+            global_keys,
+            label_schema,
+            classes_as_attrs,
+            is_video,
+            required_attrs,
         )
 
         if members:
@@ -930,6 +940,7 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
         label_schema,
         classes_as_attrs,
         is_video,
+        required_attrs,
     ):
         media_type = lb.MediaType.Video if is_video else lb.MediaType.Image
         project = self._client.create_project(
@@ -941,7 +952,9 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
             global_keys=global_keys,
         )
 
-        self._setup_editor(project, label_schema, classes_as_attrs)
+        self._setup_editor(
+            project, label_schema, classes_as_attrs, required_attrs
+        )
 
         if project.setup_complete is None:
             raise ValueError(
@@ -950,7 +963,9 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
 
         return project
 
-    def _setup_editor(self, project, label_schema, classes_as_attrs):
+    def _setup_editor(
+        self, project, label_schema, classes_as_attrs, required_attrs
+    ):
         editor = next(
             self._client.get_labeling_frontends(
                 where=lb.LabelingFrontend.name == "Editor"
@@ -980,7 +995,7 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
                 label_types[unique_label_type] = label_field
 
             field_tools, field_classifications = self._create_ontology_tools(
-                label_info, label_field, classes_as_attrs
+                label_info, label_field, classes_as_attrs, required_attrs
             )
             tools.extend(field_tools)
             classifications.extend(field_classifications)
@@ -991,17 +1006,22 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
         project.setup(editor, ontology_builder.asdict())
 
     def _create_ontology_tools(
-        self, label_info, label_field, classes_as_attrs
+        self, label_info, label_field, classes_as_attrs, required_attrs
     ):
         label_type = label_info["type"]
         classes = label_info["classes"]
         attr_schema = label_info["attributes"]
-        general_attrs = self._build_attributes(attr_schema)
+        general_attrs = self._build_attributes(attr_schema, required_attrs)
 
         if label_type in ["scalar", "classification", "classifications"]:
             tools = []
             classifications = self._build_classifications(
-                classes, label_field, general_attrs, label_type, label_field
+                classes,
+                label_field,
+                general_attrs,
+                label_type,
+                label_field,
+                required_attrs,
             )
         else:
             tools = self._build_tools(
@@ -1010,12 +1030,13 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
                 label_type,
                 general_attrs,
                 classes_as_attrs,
+                required_attrs,
             )
             classifications = []
 
         return tools, classifications
 
-    def _build_attributes(self, attr_schema):
+    def _build_attributes(self, attr_schema, required_attrs):
         attributes = []
         for attr_name, attr_info in attr_schema.items():
             attr_type = attr_info["type"]
@@ -1029,6 +1050,7 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
                 attr = lbo.Classification(
                     class_type=class_type,
                     name=attr_name,
+                    required=(attr_name in required_attrs),
                 )
             else:
                 attr_values = attr_info["values"]
@@ -1037,6 +1059,7 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
                     class_type=class_type,
                     name=attr_name,
                     options=options,
+                    required=(attr_name in required_attrs),
                 )
 
             attributes.append(attr)
@@ -1044,7 +1067,13 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
         return attributes
 
     def _build_classifications(
-        self, classes, name, general_attrs, label_type, label_field
+        self,
+        classes,
+        name,
+        general_attrs,
+        label_type,
+        label_field,
+        required_attrs,
     ):
         """Returns the classifications for the given label field. Generally,
         the classification is a dropdown selection for given classes, but can
@@ -1058,7 +1087,9 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
         for c in classes:
             if isinstance(c, dict):
                 sub_classes = c["classes"]
-                attrs = self._build_attributes(c["attributes"]) + general_attrs
+                attrs = self._build_attributes(
+                    c["attributes"], required_attrs
+                ) + general_attrs
             else:
                 sub_classes = [c]
                 attrs = general_attrs
@@ -1105,13 +1136,21 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
         return classifications
 
     def _build_tools(
-        self, classes, label_field, label_type, general_attrs, classes_as_attrs
+        self,
+        classes,
+        label_field,
+        label_type,
+        general_attrs,
+        classes_as_attrs,
+        required_attrs
     ):
         tools = []
 
         if classes_as_attrs:
             tool_type = self._tool_types_map[label_type]
-            attributes = self._create_classes_as_attrs(classes, general_attrs)
+            attributes = self._create_classes_as_attrs(
+                classes, general_attrs, required_attrs
+            )
             tools.append(
                 lbo.Tool(
                     name=label_field,
@@ -1124,7 +1163,9 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
                 if isinstance(c, dict):
                     subset_classes = c["classes"]
                     subset_attr_schema = c["attributes"]
-                    subset_attrs = self._build_attributes(subset_attr_schema)
+                    subset_attrs = self._build_attributes(
+                        subset_attr_schema, required_attrs
+                    )
                     all_attrs = general_attrs + subset_attrs
                     for sc in subset_classes:
                         tool = self._build_tool_for_class(
@@ -1147,14 +1188,16 @@ class LabelboxAnnotationAPI(foua.AnnotationAPI):
             classifications=attributes,
         )
 
-    def _create_classes_as_attrs(self, classes, general_attrs):
+    def _create_classes_as_attrs(self, classes, general_attrs, required_attrs):
         """Creates radio attributes for all classes and formats all
         class-specific attributes.
         """
         options = []
         for c in classes:
             if isinstance(c, dict):
-                subset_attrs = self._build_attributes(c["attributes"])
+                subset_attrs = self._build_attributes(
+                    c["attributes"], required_attrs
+                )
                 for sc in c["classes"]:
                     options.append(
                         lbo.Option(value=str(sc), options=subset_attrs)

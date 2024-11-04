@@ -592,6 +592,15 @@ class LabelboxBackend(AnnotationBackend):
                 "or \"NONE\" for no integration)"
             )
         )
+        inputs.list(
+            "required_attrs",
+            types.String(),
+            default=None,
+            label="Required attributes",
+            description=(
+                "An optional list of attributes to require on each annotation"
+            ),
+        )
 
     def parse_parameters(self, ctx, params):
         if "members" in params:
