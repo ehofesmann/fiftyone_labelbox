@@ -685,6 +685,14 @@ class LoadAnnotations(foo.Operator):
 
 
 def load_annotations(ctx, inputs):
+    if "custom_labelbox" not in fo.annotation_config.backends:
+        fo.annotation_config.backends["custom_labelbox"] = {}
+
+    fo.annotation_config.backends["custom_labelbox"].update({
+        "config_cls": "custom_labelbox.LabelboxBackendConfig",
+        "url": "https://labelbox.com"
+    })
+
     anno_keys = ctx.dataset.list_annotation_runs()
 
     if not anno_keys:
@@ -896,6 +904,14 @@ class DeleteAnnotationRun(foo.Operator):
         foo.execute_operator(self.uri, ctx, params=params)
 
     def resolve_input(self, ctx):
+        if "custom_labelbox" not in fo.annotation_config.backends:
+            fo.annotation_config.backends["custom_labelbox"] = {}
+
+        fo.annotation_config.backends["custom_labelbox"].update({
+            "config_cls": "custom_labelbox.LabelboxBackendConfig",
+            "url": "https://labelbox.com"
+        })
+
         inputs = types.Object()
 
         anno_key = get_anno_key(ctx, inputs, show_default=False)
