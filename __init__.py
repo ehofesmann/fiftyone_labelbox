@@ -555,7 +555,7 @@ class LabelboxBackend(AnnotationBackend):
             description="A name to assign to the generated project",
         )
         inputs.list(
-            "member",
+            "members",
             self.build_member(required_inputs=required_inputs),
             default=None,
             label="Members",
@@ -592,11 +592,20 @@ class LabelboxBackend(AnnotationBackend):
                 "or \"NONE\" for no integration)"
             )
         )
+        inputs.list(
+            "required_attrs",
+            types.String(),
+            default=None,
+            label="Required attributes",
+            description=(
+                "An optional list of attributes to require on each annotation"
+            ),
+        )
 
     def parse_parameters(self, ctx, params):
-        if "member" in params:
-            params["member"] = [
-                (m["email"], m["role"]) for m in params["member"]
+        if "members" in params:
+            params["members"] = [
+                (m["email"], m["role"]) for m in params["members"]
             ]
 
     def build_member(self, required_inputs=True):
@@ -676,6 +685,14 @@ class LoadAnnotations(foo.Operator):
 
 
 def load_annotations(ctx, inputs):
+    if "custom_labelbox" not in fo.annotation_config.backends:
+        fo.annotation_config.backends["custom_labelbox"] = {}
+
+    fo.annotation_config.backends["custom_labelbox"].update({
+        "config_cls": "custom_labelbox.LabelboxBackendConfig",
+        "url": "https://labelbox.com"
+    })
+
     anno_keys = ctx.dataset.list_annotation_runs()
 
     if not anno_keys:
@@ -780,7 +797,7 @@ class GetAnnotationInfo(foo.Operator):
 
         info = ctx.dataset.get_annotation_info(anno_key)
 
-        timestamp = info.timestamp.strftime("%Y-%M-%d %H:%M:%S")
+        timestamp = info.timestamp.strftime("%Y-%m-%d %H:%M:%S")
         config = info.config.serialize()
         config = {k: v for k, v in config.items() if v is not None}
 
@@ -887,6 +904,14 @@ class DeleteAnnotationRun(foo.Operator):
         foo.execute_operator(self.uri, ctx, params=params)
 
     def resolve_input(self, ctx):
+        if "custom_labelbox" not in fo.annotation_config.backends:
+            fo.annotation_config.backends["custom_labelbox"] = {}
+
+        fo.annotation_config.backends["custom_labelbox"].update({
+            "config_cls": "custom_labelbox.LabelboxBackendConfig",
+            "url": "https://labelbox.com"
+        })
+
         inputs = types.Object()
 
         anno_key = get_anno_key(ctx, inputs, show_default=False)
